@@ -32,12 +32,13 @@ function verifyRefreshToken(token) {
 // How the refresh token is stored client-side (httpOnly cookie).
 function refreshCookieOptions() {
   const days = 30;
+
   return {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
+    secure: true,
+    sameSite: 'none',
     maxAge: days * 24 * 60 * 60 * 1000,
-    path: '/api/v1/auth',
+    path: '/',
   };
 }
 
