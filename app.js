@@ -20,11 +20,20 @@ app.set('trust proxy', 1);
 // Security headers
 app.use(helmet());
 
-// CORS — locked to the configured client origin, credentials allowed for
-// the httpOnly refresh-token cookie.
+const allowedOrigins = [
+  'http://localhost:5173',
+  'https://hamspon.vercel.app'
+];
+
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || 'http://localhost:5173',
+    origin: function (origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     credentials: true,
   })
 );
