@@ -76,6 +76,13 @@ const siteSettingsSchema = new mongoose.Schema(
       default: 'To be a leading centre of educational excellence, shaping confident, principled leaders for tomorrow.',
     },
     coreValues: { type: [String], default: ['Integrity', 'Excellence', 'Respect', 'Innovation'] },
+    // The only two stats shown publicly now (Home + About, via the shared
+    // SchoolStats component) — free-text so the admin can write "2,500+",
+    // "3,000+", "13+", etc. Left blank, the stat is simply not shown.
+    studentCount: { type: String, trim: true, default: '2,500+' },
+    yearsOfExcellence: { type: String, trim: true, default: '13+' },
+    // Kept for backward compatibility with any data already saved here —
+    // no longer read by the public site (see SchoolStats.jsx).
     statistics: {
       type: [statSchema],
       default: [
