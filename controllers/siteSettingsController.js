@@ -2,9 +2,9 @@ const SiteSettings = require('../models/SiteSettings');
 const catchAsync = require('../utils/catchAsync');
 const AppError = require('../utils/AppError');
 const recordAudit = require('../utils/audit');
-const { uploadBuffer } = require('../utils/cloudinaryUpload');
+const { uploadBuffer, deleteFromCloudinary } = require('../utils/cloudinaryUpload');
 
-const VALID_TARGETS = ['logo', 'favicon', 'ogImage', 'admissionsBanner', 'heroImage'];
+const VALID_TARGETS = ['logo', 'favicon', 'ogImage', 'admissionsBanner', 'heroImage', 'aboutHistoryImage'];
 
 // GET /api/v1/site-settings — admin (full document, same shape as public)
 exports.getSettings = catchAsync(async (req, res) => {
@@ -52,6 +52,7 @@ exports.uploadImage = catchAsync(async (req, res, next) => {
   else if (target === 'ogImage') settings.seo.ogImage = url;
   else if (target === 'admissionsBanner') settings.admissions.banner = url;
   else if (target === 'heroImage') settings.hero.backgroundImages.push(url);
+  else if (target === 'aboutHistoryImage') settings.aboutHistoryImage = url;
 
   settings.updatedBy = req.user.id;
   await settings.save();
@@ -60,6 +61,34 @@ exports.uploadImage = catchAsync(async (req, res, next) => {
     actor: req.user.id,
     action: 'site_settings.upload_image',
     details: { target },
+    targetModel: 'SiteSettings',
+    targetId: settings._id,
+  });
+
+  res.status(200).json({ status: 'success', data: settings });
+});
+
+// POST /api/v1/site-settings/video — multipart, field name "video".
+// Replaces the single school tour video (Gallery page). Deletes the
+// previous video from Cloudinary once the new one is saved, so replacing
+// it doesn't leave the old file behind indefinitely.
+exports.uploadTourVideo = catchAsync(async (req, res, next) => {
+  if (!req.file) return next(new AppError('No video file uploaded.', 400));
+
+  const { url, publicId } = await uploadBuffer(req.file.buffer, { folder: 'site/tour-video', resourceType: 'video' });
+  const settings = await SiteSettings.getSingleton();
+  const previousPublicId = settings.tourVideoPublicId;
+
+  settings.tourVideoUrl = url;
+  settings.tourVideoPublicId = publicId;
+  settings.updatedBy = req.user.id;
+  await settings.save();
+
+  if (previousPublicId) await deleteFromCloudinary(previousPublicId, 'video');
+
+  await recordAudit({
+    actor: req.user.id,
+    action: 'site_settings.upload_tour_video',
     targetModel: 'SiteSettings',
     targetId: settings._id,
   });

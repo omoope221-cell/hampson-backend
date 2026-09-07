@@ -27,7 +27,9 @@ const siteSettingsSchema = new mongoose.Schema(
     schoolName: { type: String, default: 'Hampsons Group of School' },
     motto: { type: String, default: 'Believe and Achieve' },
     logo: { type: String, default: '/logo-removebg-preview.png' },
-    tourVideoUrl: { type: String, default: '' }, // YouTube/Vimeo link or a direct video file URL
+    aboutHistoryImage: { type: String, default: '' }, // "Our History" photo on the public About page
+    tourVideoUrl: { type: String, default: '' }, // Cloudinary-hosted .mp4, uploaded via Website Management
+    tourVideoPublicId: { type: String, default: '' },
     favicon: { type: String, default: null },
     email: { type: String, default: 'info@hampsonsgroupofschool.edu.ng' },
     admissionsEmail: { type: String, default: 'admissions@hampsonsgroupofschool.edu.ng' },
@@ -55,7 +57,7 @@ const siteSettingsSchema = new mongoose.Schema(
           "Nurturing Tomorrow's Leaders Today — world-class education blending academic excellence with character development, creativity, and innovation.",
       },
       buttonText: { type: String, default: 'Apply Now' },
-      buttonLink: { type: String, default: '/admissions' },
+      buttonLink: { type: String, default: '/admissions/apply' },
       backgroundImages: { type: [String], default: [] },
       backgroundVideo: { type: String, default: null },
     },
@@ -98,7 +100,7 @@ const siteSettingsSchema = new mongoose.Schema(
       title: { type: String, default: 'Ready to Join the Hampsons Family?' },
       subtitle: { type: String, default: 'Applications for the current academic year are now open. Spaces are limited.' },
       buttonText: { type: String, default: 'Apply Now' },
-      buttonLink: { type: String, default: '/admissions' },
+      buttonLink: { type: String, default: '/admissions/apply' },
     },
 
     // --- Admissions page ---

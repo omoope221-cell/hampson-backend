@@ -34,10 +34,23 @@ function imageFileFilter(req, file, cb) {
   cb(null, true);
 }
 
+const ALLOWED_VIDEO_MIME = ['video/mp4'];
+function videoFileFilter(req, file, cb) {
+  if (!ALLOWED_VIDEO_MIME.includes(file.mimetype)) {
+    return cb(new AppError('Only .mp4 video files are allowed.', 400), false);
+  }
+  cb(null, true);
+}
+
 const maxSize = (parseInt(process.env.MAX_UPLOAD_MB, 10) || 5) * 1024 * 1024;
+const maxVideoSize = (parseInt(process.env.MAX_VIDEO_UPLOAD_MB, 10) || 100) * 1024 * 1024;
 
 // All image uploads: memory storage → buffer → Cloudinary in the controller.
 const imageUpload = multer({ storage: multer.memoryStorage(), fileFilter: imageFileFilter, limits: { fileSize: maxSize } });
+// The school tour video: same memory-storage → Cloudinary pattern, but
+// its own filter (.mp4 only) and a much larger size ceiling than a
+// photo — override with MAX_VIDEO_UPLOAD_MB in .env if 100MB isn't enough.
+const videoUpload = multer({ storage: multer.memoryStorage(), fileFilter: videoFileFilter, limits: { fileSize: maxVideoSize } });
 
 exports.uploadStudentPhoto = imageUpload.single('passportPhoto');
 exports.uploadStaffPhoto = imageUpload.single('profilePicture');
@@ -50,6 +63,7 @@ exports.uploadAnnouncementImage = imageUpload.single('image');
 // Settings page (logo / favicon / OG image / a banner / one hero image at
 // a time). The `target` is validated by the controller, not multer.
 exports.uploadSiteImage = imageUpload.single('image');
+exports.uploadTourVideo = videoUpload.single('video');
 
 // The public application form: up to three named supporting documents in
 // one submission. Can be an image or a PDF, so no imageFileFilter here;
