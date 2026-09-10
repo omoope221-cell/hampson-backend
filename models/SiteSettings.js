@@ -26,7 +26,9 @@ const siteSettingsSchema = new mongoose.Schema(
     // --- Identity / contact (Website Settings + Contact page + Footer) ---
     schoolName: { type: String, default: 'Hampsons Group of School' },
     motto: { type: String, default: 'Believe and Achieve' },
-    logo: { type: String, default: '/logo-removebg-preview.png' },
+    logo: { type: String, default: '/logo-schools.png' }, // general — public site, admin/staff portals
+    logoPrimary: { type: String, default: '/logo-primary.png' }, // shown to primary students/parents
+    logoSecondary: { type: String, default: '/logo-college.png' }, // shown to secondary students/parents
     aboutHistoryImage: { type: String, default: '' }, // "Our History" photo on the public About page
     tourVideoUrl: { type: String, default: '' }, // Cloudinary-hosted .mp4, uploaded via Website Management
     tourVideoPublicId: { type: String, default: '' },

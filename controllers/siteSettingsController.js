@@ -4,7 +4,7 @@ const AppError = require('../utils/AppError');
 const recordAudit = require('../utils/audit');
 const { uploadBuffer, deleteFromCloudinary } = require('../utils/cloudinaryUpload');
 
-const VALID_TARGETS = ['logo', 'favicon', 'ogImage', 'admissionsBanner', 'heroImage', 'aboutHistoryImage'];
+const VALID_TARGETS = ['logo', 'logoPrimary', 'logoSecondary', 'favicon', 'ogImage', 'admissionsBanner', 'heroImage', 'aboutHistoryImage'];
 
 // GET /api/v1/site-settings — admin (full document, same shape as public)
 exports.getSettings = catchAsync(async (req, res) => {
@@ -48,6 +48,8 @@ exports.uploadImage = catchAsync(async (req, res, next) => {
   const settings = await SiteSettings.getSingleton();
 
   if (target === 'logo') settings.logo = url;
+  else if (target === 'logoPrimary') settings.logoPrimary = url;
+  else if (target === 'logoSecondary') settings.logoSecondary = url;
   else if (target === 'favicon') settings.favicon = url;
   else if (target === 'ogImage') settings.seo.ogImage = url;
   else if (target === 'admissionsBanner') settings.admissions.banner = url;
