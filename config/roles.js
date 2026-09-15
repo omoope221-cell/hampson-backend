@@ -65,24 +65,24 @@ const DEFAULT_STAFF_PERMISSIONS = {
   head_teacher: perms(
     ['students', 'classes', 'subjects', 'attendance', 'results', 'timetable', 'assignments'],
     ['view', 'create', 'update']
-  ),
+  ).concat(perms(['results'], ['approve'])), // Head Teacher is an overseer — see resultController's OVERSEER_STAFF_ROLES.
   teacher: perms(
     ['students', 'attendance', 'assignments', 'results', 'timetable', 'messages'],
     ['view', 'create', 'update']
   ).concat(perms(['subjects', 'classes'], ['view']))
-    .concat(perms(['fees'], ['view', 'create', 'update', 'delete']))
-    // A teacher who happens to be the Class Teacher for one of their
-    // classes (Class.classTeacher — a per-class assignment, not a
-    // separate staffRole) needs to reach the approve/publish endpoint.
-    // resultController still checks, per result, whether this specific
-    // staff member is actually that class's Class Teacher — a Subject
-    // Teacher with no class-teacher assignment gets a 403 there even
-    // though the RBAC gate lets the request through.
+    .concat(perms(['fees'], ['view', 'create', 'update', 'delete'])),
+    // A 'teacher' staffRole covers both Subject Teachers and Class
+    // Teachers — Class.subjectTeachers/classTeacher decide which
+    // classes/subjects a specific teacher can actually touch, checked
+    // per-request in subjectResultController/resultController. This
+    // grant only gets them past the route-level RBAC gate; it is NOT
+    // 'results.approve' — approving/publishing is admin-only now (see
+    // resultController.approveResult), a plain Class Teacher only
+    // submits their class's result for review.
     // Same pattern for fees: feeController checks Class.classTeacher
     // before letting a create/update/delete through — a teacher who
     // isn't a Class Teacher for any class gets 403'd there, even though
     // this permission grant lets the request past the route gate.
-    .concat(perms(['results'], ['approve'])),
   accountant: perms(['fees', 'payments', 'reports'], ['view', 'create', 'update']).concat(
     perms(['students', 'parents'], ['view'])
   ),

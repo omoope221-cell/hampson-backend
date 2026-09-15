@@ -7,6 +7,21 @@ const classSchema = new mongoose.Schema(
     arm: { type: String, trim: true, default: null }, // e.g. "A", "B" (stream/arm)
     classTeacher: { type: mongoose.Schema.Types.ObjectId, ref: 'Staff', default: null },
     subjects: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Subject' }],
+    // Per-subject teacher assignment for THIS class — the source of truth
+    // for who may enter results for a given subject in this class. A
+    // teacher can be the subjectTeacher for Maths in JSS2A without being
+    // able to touch English, Biology, etc. in the same class, and without
+    // being able to touch Maths in a class they're not listed here for.
+    // Staff.assignedClasses/assignedSubjects (flat lists) are only used
+    // for broad "which students can this staff member see" visibility —
+    // this array is the one result-entry permission checks rely on.
+    subjectTeachers: [
+      {
+        _id: false,
+        subject: { type: mongoose.Schema.Types.ObjectId, ref: 'Subject', required: true },
+        teacher: { type: mongoose.Schema.Types.ObjectId, ref: 'Staff', required: true },
+      },
+    ],
     capacity: { type: Number, default: 40 },
     session: { type: mongoose.Schema.Types.ObjectId, ref: 'Session', required: true },
   },
