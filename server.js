@@ -4,6 +4,8 @@ const path = require('path');
 const connectDB = require('./config/db');
 const logger = require('./utils/logger');
 const app = require('./app');
+const { dropStaleStudentIdIndex } = require('./scripts/fixStaleIndexes');
+const mongoose = require('mongoose');
 
 // Make sure logs/ and uploads/ exist before winston or multer try to write.
 ['logs', 'uploads/students', 'uploads/staff', 'uploads/attachments'].forEach((dir) => {
@@ -18,7 +20,18 @@ process.on('uncaughtException', (err) => {
 
 const PORT = process.env.PORT || 5000;
 
-connectDB().then(() => {
+connectDB().then(async () => {
+  // Self-heals the leftover unique index on `studentId` (see
+  // scripts/fixStaleIndexes.js) so deploying this change is enough —
+  // nobody has to remember to run a migration by hand. Never blocks
+  // startup: if this fails for any reason (e.g. a DB user without
+  // index-management rights), we just log it and carry on.
+  try {
+    await dropStaleStudentIdIndex(mongoose.connection);
+  } catch (err) {
+    logger.error(`Could not check/drop stale student index on startup: ${err.message}`);
+  }
+
   const server = app.listen(PORT, () => {
     logger.info(`Hampsons Group of School API running on port ${PORT} [${process.env.NODE_ENV}]`);
   });
