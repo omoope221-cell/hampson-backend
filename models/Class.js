@@ -19,7 +19,12 @@ const classSchema = new mongoose.Schema(
       {
         _id: false,
         subject: { type: mongoose.Schema.Types.ObjectId, ref: 'Subject', required: true },
-        teacher: { type: mongoose.Schema.Types.ObjectId, ref: 'Staff', required: true },
+        // Optional on purpose: a subject can be listed for a class with
+        // no teacher assigned yet — e.g. a primary class where the
+        // Class Teacher covers every subject themselves. See
+        // subjectResultController's "class teacher fallback" for how
+        // that's authorized.
+        teacher: { type: mongoose.Schema.Types.ObjectId, ref: 'Staff', default: null },
       },
     ],
     capacity: { type: Number, default: 40 },

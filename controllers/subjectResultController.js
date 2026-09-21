@@ -10,13 +10,19 @@ const { scoreSubjectEntry, syncResultFromSubjectEntries } = require('../utils/re
 const OVERSEER_ROLES = ['principal', 'vice_principal', 'head_teacher'];
 const isOverseerReq = (req) => req.user.accountType === 'super_admin' || OVERSEER_ROLES.includes(req.user.staffRole);
 
-// Confirms the logged-in user may touch this class+subject's scores:
-// either they ARE the Class.subjectTeachers entry for that subject, or
-// they're an overseer (Super Admin/Principal/Vice Principal/Head
-// Teacher) who can correct anything. This is the backend enforcement
-// spec item 6 asks for — it runs regardless of what the frontend shows
-// or hides, so a Subject Teacher cannot reach another subject/class by
-// editing the request body or calling the API directly.
+// Confirms the logged-in user may touch this class+subject's scores, and
+// tells the caller WHO the entry should be attributed to. Three ways in:
+//   1. Overseer (Super Admin/Principal/Vice Principal/Head Teacher) —
+//      can correct anything.
+//   2. The specific subject teacher Class.subjectTeachers names for this
+//      subject in this class.
+//   3. The class's Class Teacher, but ONLY when this subject has no
+//      subject teacher assigned at all — the fallback for classes (often
+//      primary/lower classes) where one teacher covers every subject.
+//      The moment Admin assigns a real subject teacher, this fallback
+//      stops applying for that subject.
+// This is the backend enforcement spec item 6 asks for — it runs
+// regardless of what the frontend shows or hides.
 async function assertSubjectAssignment(req, classId, subjectId) {
   const classDoc = await Class.findById(classId);
   if (!classDoc) throw new AppError('Class not found.', 404);
@@ -25,17 +31,30 @@ async function assertSubjectAssignment(req, classId, subjectId) {
   const assignment = (classDoc.subjectTeachers || []).find(
     (st) => String(st.subject) === String(subjectId)
   );
-  const assignedStaffId = assignment ? assignment.teacher : null;
+  if (!assignment) {
+    throw new AppError('This subject has not been added to this class yet — add it from Classes & Subjects first.', 400);
+  }
+  const assignedStaffId = assignment.teacher || null;
 
   if (isOverseerReq(req)) {
-    return { staff, isOverseer: true, classDoc, assignedStaffId };
+    return { staff, isOverseer: true, classDoc, effectiveTeacherId: assignedStaffId };
   }
 
   if (!staff) throw new AppError('No staff profile linked to this account.', 403);
-  if (!assignedStaffId || String(assignedStaffId) !== String(staff._id)) {
-    throw new AppError('You are not assigned to teach this subject in this class.', 403);
+
+  // Path 2: the named subject teacher.
+  if (assignedStaffId && String(assignedStaffId) === String(staff._id)) {
+    return { staff, isOverseer: false, classDoc, effectiveTeacherId: assignedStaffId };
   }
-  return { staff, isOverseer: false, classDoc, assignedStaffId };
+
+  // Path 3: nobody specific is assigned to this subject — the Class
+  // Teacher can cover it.
+  const isClassTeacher = !!(classDoc.classTeacher && String(classDoc.classTeacher) === String(staff._id));
+  if (!assignedStaffId && isClassTeacher) {
+    return { staff, isOverseer: false, classDoc, effectiveTeacherId: staff._id, viaClassTeacherFallback: true };
+  }
+
+  throw new AppError('You are not assigned to teach this subject in this class.', 403);
 }
 
 // GET /api/v1/results/subject-entries/assignments — "My Classes" + "My
@@ -51,16 +70,22 @@ exports.getMyAssignments = catchAsync(async (req, res, next) => {
 
   const classes = await Class.find(filter)
     .populate('subjectTeachers.subject', 'name code')
-    .select('name arm section session subjectTeachers');
+    .select('name arm section session subjectTeachers classTeacher');
 
   const assignments = [];
   classes.forEach((c) => {
+    const isClassTeacher = !!(c.classTeacher && String(c.classTeacher) === String(staff._id));
     (c.subjectTeachers || []).forEach((st) => {
-      if (String(st.teacher) === String(staff._id)) {
+      const assignedToMe = st.teacher && String(st.teacher) === String(staff._id);
+      const unassignedFallback = !st.teacher && isClassTeacher;
+      if (assignedToMe || unassignedFallback) {
         assignments.push({
           class: { _id: c._id, name: c.name, arm: c.arm, section: c.section },
           subject: st.subject,
           session: c.session,
+          // True when this shows up because no subject teacher is
+          // assigned and the requester is the Class Teacher covering it.
+          viaClassTeacher: unassignedFallback,
         });
       }
     });
@@ -115,9 +140,9 @@ exports.upsertSubjectResult = catchAsync(async (req, res, next) => {
     return next(new AppError('student, class, subject, session and term are required.', 400));
   }
 
-  const { staff, assignedStaffId } = await assertSubjectAssignment(req, classId, subject);
-  if (!assignedStaffId) {
-    return next(new AppError('No subject teacher is assigned to this subject for this class yet — assign one from Classes & Subjects first.', 400));
+  const { staff, effectiveTeacherId } = await assertSubjectAssignment(req, classId, subject);
+  if (!effectiveTeacherId) {
+    return next(new AppError('No subject teacher is assigned to this subject, and this class has no Class Teacher either — assign one of the two from Classes & Subjects first.', 400));
   }
 
   const studentDoc = await Student.findOne({ _id: student, class: classId });
@@ -137,7 +162,7 @@ exports.upsertSubjectResult = catchAsync(async (req, res, next) => {
   }
 
   if (!entry) {
-    entry = new SubjectResult({ student, class: classId, subject, session, term, enteredBy: staff?._id, teacher: assignedStaffId });
+    entry = new SubjectResult({ student, class: classId, subject, session, term, enteredBy: staff?._id, teacher: effectiveTeacherId });
   }
   if (ca1 !== undefined) entry.ca1 = Number(ca1);
   if (ca2 !== undefined) entry.ca2 = Number(ca2);

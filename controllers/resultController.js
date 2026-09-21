@@ -218,11 +218,14 @@ exports.getClassReviewMatrix = catchAsync(async (req, res, next) => {
     return next(new AppError('class, session and term are required.', 400));
   }
 
-  const classDoc = await Class.findById(classId).populate('subjectTeachers.subject', 'name code').populate('subjectTeachers.teacher', 'firstName lastName');
+  const classDoc = await Class.findById(classId)
+    .populate('subjectTeachers.subject', 'name code')
+    .populate('subjectTeachers.teacher', 'firstName lastName')
+    .populate('classTeacher', 'firstName lastName');
   if (!classDoc) return next(new AppError('Class not found.', 404));
   if (!isOverseerReq(req)) {
     const staff = await Staff.findOne({ user: req.user.id });
-    const isClassTeacher = !!(staff && classDoc.classTeacher && classDoc.classTeacher.equals(staff._id));
+    const isClassTeacher = !!(staff && classDoc.classTeacher && classDoc.classTeacher._id.equals(staff._id));
     if (!isClassTeacher) return next(new AppError("Only this class's Class Teacher or an admin can view this.", 403));
   }
 
@@ -246,7 +249,10 @@ exports.getClassReviewMatrix = catchAsync(async (req, res, next) => {
       const entry = entriesByStudent.get(String(s._id))?.get(String(sa.subject._id || sa.subject));
       return {
         subject: sa.subject,
-        teacher: sa.teacher,
+        // No subject teacher assigned → the Class Teacher covers this
+        // subject (see subjectResultController's class-teacher fallback).
+        teacher: sa.teacher || classDoc.classTeacher || null,
+        viaClassTeacher: !sa.teacher,
         status: entry ? entry.status : 'not_started',
         total: entry?.total ?? null,
       };
