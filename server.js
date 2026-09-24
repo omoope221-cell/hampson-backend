@@ -5,6 +5,7 @@ const connectDB = require('./config/db');
 const logger = require('./utils/logger');
 const app = require('./app');
 const { dropStaleStudentIdIndex } = require('./scripts/fixStaleIndexes');
+const { backfillStaffSection } = require('./scripts/backfillStaffSection');
 const mongoose = require('mongoose');
 
 // Make sure logs/ and uploads/ exist before winston or multer try to write.
@@ -30,6 +31,14 @@ connectDB().then(async () => {
     await dropStaleStudentIdIndex(mongoose.connection);
   } catch (err) {
     logger.error(`Could not check/drop stale student index on startup: ${err.message}`);
+  }
+
+  // Same idea, for staff records saved before the `section` field
+  // existed — see scripts/backfillStaffSection.js.
+  try {
+    await backfillStaffSection();
+  } catch (err) {
+    logger.error(`Could not backfill staff section on startup: ${err.message}`);
   }
 
   const server = app.listen(PORT, () => {
