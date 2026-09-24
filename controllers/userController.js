@@ -56,7 +56,7 @@ exports.getUser = catchAsync(async (req, res, next) => {
 
 // POST /api/v1/users/staff  — creates a User + linked Staff profile
 exports.createStaffAccount = catchAsync(async (req, res, next) => {
-  const { fullName, email, phone, role, department, staffId, tempPassword, assignedClasses, assignedSubjects } = req.body;
+  const { fullName, email, phone, role, department, section, staffId, tempPassword, assignedClasses, assignedSubjects } = req.body;
   if (!fullName || !email || !role || !staffId) {
     return next(new AppError('fullName, email, role and staffId are required.', 400));
   }
@@ -93,6 +93,7 @@ exports.createStaffAccount = catchAsync(async (req, res, next) => {
             lastName: req.body.lastName || fullName.split(' ').slice(1).join(' ') || fullName,
             role,
             department,
+            section: section || 'both',
             assignedClasses: Array.isArray(assignedClasses) ? assignedClasses : [],
             assignedSubjects: Array.isArray(assignedSubjects) ? assignedSubjects : [],
           },

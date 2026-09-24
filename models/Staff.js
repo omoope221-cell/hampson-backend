@@ -9,6 +9,12 @@ const staffSchema = new mongoose.Schema(
     lastName: { type: String, required: true, trim: true },
     role: { type: String, enum: STAFF_ROLES, required: true },
     department: { type: String, trim: true },
+    // Which school level this staff member teaches in — used to filter
+    // who shows up as a Class Teacher / Subject Teacher option when
+    // admins assign staff to a primary vs. secondary class. Defaults to
+    // 'both' so staff created before this field existed (or genuinely
+    // teaching across both levels) still show up everywhere.
+    section: { type: String, enum: ['primary', 'secondary', 'both'], default: 'both' },
     profilePicture: { type: String, default: null },
     dateOfBirth: { type: Date },
     gender: { type: String, enum: ['male', 'female'] },
