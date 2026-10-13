@@ -1,9 +1,37 @@
 const PDFDocument = require('pdfkit');
 const https = require('https');
 const http = require('http');
+const fs = require('fs');
+const path = require('path');
 
 const NAVY = '#1b2a52';
 const CRIMSON = '#8f2233';
+
+// Same address/contact block on every report card, whichever section the
+// student is in.
+const SCHOOL_ADDRESS = '17, Ilo-Awela Road, By Toll-Gate, Ota, Ogun State';
+const SCHOOL_PHONES = '09065074217, 08101611363';
+const SCHOOL_EMAIL = 'hampsonsschool@gmail.com';
+
+// Header branding per section. Secondary students get Hampsons College
+// and its logo (bundled at backend/assets so it never depends on a
+// remote URL). Primary students get the Nursery & Primary name; no
+// primary-specific logo has been supplied, so none is drawn for them —
+// drop one at backend/assets/hampsons-primary-logo.png and it'll be
+// picked up automatically.
+const BRANDING = {
+  secondary: { name: 'HAMPSONS COLLEGE', logoFile: 'hampsons-college-logo.png' },
+  primary: { name: 'HAMPSONS NURSERY & PRIMARY SCHOOL', logoFile: 'hampsons-primary-logo.png' },
+};
+
+function loadLocalLogo(file) {
+  try {
+    const full = path.join(__dirname, '..', 'assets', file);
+    return fs.existsSync(full) ? fs.readFileSync(full) : null;
+  } catch {
+    return null;
+  }
+}
 
 const AFFECTIVE_LABELS = {
   punctuality: 'Punctuality', neatness: 'Neatness', honesty: 'Honesty', respect: 'Respect',
@@ -54,7 +82,12 @@ function fetchImageBuffer(url) {
 // (an Express response). `result` must already be populated: student,
 // class, session, scores.subject, and class.classTeacher.
 async function streamReportCard(res, { result, schoolName, schoolLogo, schoolMotto }) {
-  const logoBuffer = await fetchImageBuffer(schoolLogo);
+  const section = result.student?.section || result.class?.section;
+  const branding = BRANDING[section];
+  // Known section → fixed branding + bundled logo. Anything else falls
+  // back to the old behaviour (site settings name + remote logo).
+  const displayName = branding ? branding.name : String(schoolName || '').toUpperCase();
+  const logoBuffer = branding ? loadLocalLogo(branding.logoFile) : await fetchImageBuffer(schoolLogo);
 
   const doc = new PDFDocument({ size: 'A4', margin: 36 });
   res.setHeader('Content-Type', 'application/pdf');
@@ -69,18 +102,25 @@ async function streamReportCard(res, { result, schoolName, schoolLogo, schoolMot
 
   // --- Header ---
   const headerTop = doc.y;
+  const logoSize = 62;
   if (logoBuffer) {
-    try { doc.image(logoBuffer, left, headerTop, { fit: [50, 50] }); } catch { /* skip a corrupt/unsupported image */ }
+    try { doc.image(logoBuffer, left, headerTop, { fit: [logoSize, logoSize] }); } catch { /* skip a corrupt/unsupported image */ }
   }
-  const titleX = logoBuffer ? left + 60 : left;
-  const titleWidth = logoBuffer ? pageWidth - 60 : pageWidth;
-  doc.font('Helvetica-Bold').fontSize(17).fillColor(NAVY).text(schoolName.toUpperCase(), titleX, headerTop, { width: titleWidth, align: 'center' });
-  doc.font('Helvetica-Bold').fontSize(12).fillColor(CRIMSON).text('STUDENT REPORT CARD', titleX, doc.y, { width: titleWidth, align: 'center' });
+  const titleX = logoBuffer ? left + logoSize + 8 : left;
+  const titleWidth = logoBuffer ? pageWidth - (logoSize + 8) * 2 : pageWidth; // symmetric so the text stays centred on the page
+  const textX = logoBuffer ? left + logoSize + 8 : left;
+  doc.font('Helvetica-Bold').fontSize(17).fillColor(NAVY).text(displayName, textX, headerTop, { width: titleWidth, align: 'center' });
+  doc.font('Helvetica').fontSize(8.5).fillColor('#333333');
+  doc.text(SCHOOL_ADDRESS, textX, doc.y + 1, { width: titleWidth, align: 'center' });
+  doc.text(`Tel: ${SCHOOL_PHONES}`, textX, doc.y, { width: titleWidth, align: 'center' });
+  doc.text(`Email: ${SCHOOL_EMAIL}`, textX, doc.y, { width: titleWidth, align: 'center' });
+  doc.y = Math.max(doc.y, headerTop + (logoBuffer ? logoSize : 0)) + 6;
+  doc.font('Helvetica-Bold').fontSize(12).fillColor(CRIMSON).text('STUDENT REPORT CARD', left, doc.y, { width: pageWidth, align: 'center' });
   doc.fillColor('#000000');
   doc.moveDown(0.3);
   doc.font('Helvetica').fontSize(10).text(
     `School Session: ${result.session?.name || '__________'}        Term: ${result.term}`,
-    { align: 'center' }
+    left, doc.y, { width: pageWidth, align: 'center' }
   );
   doc.moveDown(0.7);
 
@@ -102,18 +142,16 @@ async function streamReportCard(res, { result, schoolName, schoolLogo, schoolMot
   // --- Academic Performance ---
   sectionTitle(doc, 'ACADEMIC PERFORMANCE', pageWidth, left);
   const cols = [
-    { header: 'Subject', width: 0.26 },
-    { header: 'CA1(10)', width: 0.08 },
-    { header: 'CA2(10)', width: 0.08 },
-    { header: 'Assign.(10)', width: 0.1 },
-    { header: 'Exam(70)', width: 0.09 },
-    { header: 'Total(100)', width: 0.1 },
-    { header: 'Grade', width: 0.08 },
-    { header: 'Position', width: 0.09 },
-    { header: 'Remark', width: 0.12 },
+    { header: 'Subject', width: 0.30 },
+    { header: 'CA1(10)', width: 0.11 },
+    { header: 'Exam(70)', width: 0.12 },
+    { header: 'Total(100)', width: 0.12 },
+    { header: 'Grade', width: 0.09 },
+    { header: 'Position', width: 0.10 },
+    { header: 'Remark', width: 0.16 },
   ];
   const rows = result.scores.map((s) => [
-    s.subject?.name || '—', String(s.ca1 ?? 0), String(s.ca2 ?? 0), String(s.assignment ?? 0),
+    s.subject?.name || '—', String(s.ca1 ?? 0),
     String(s.exam ?? 0), String(s.total ?? 0), s.grade || '—', s.position ? ordinal(s.position) : '—', s.remark || '—',
   ]);
   gridTable(doc, cols, rows, pageWidth, left);
