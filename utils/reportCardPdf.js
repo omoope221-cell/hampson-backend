@@ -143,7 +143,7 @@ async function streamReportCard(res, { result, schoolName, schoolLogo, schoolMot
   sectionTitle(doc, 'ACADEMIC PERFORMANCE', pageWidth, left);
   const cols = [
     { header: 'Subject', width: 0.30 },
-    { header: 'CA1(10)', width: 0.11 },
+    { header: 'CA(30)', width: 0.11 },
     { header: 'Exam(70)', width: 0.12 },
     { header: 'Total(100)', width: 0.12 },
     { header: 'Grade', width: 0.09 },

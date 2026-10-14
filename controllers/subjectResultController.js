@@ -148,7 +148,7 @@ exports.upsertSubjectResult = catchAsync(async (req, res, next) => {
   const studentDoc = await Student.findOne({ _id: student, class: classId });
   if (!studentDoc) return next(new AppError('This student is not in the specified class.', 400));
 
-  for (const [field, value, max] of [['ca1', ca1, 10], ['ca2', ca2, 10], ['assignment', assignment, 10], ['exam', exam, 70]]) {
+  for (const [field, value, max] of [['ca1', ca1, 30], ['ca2', ca2, 10], ['assignment', assignment, 10], ['exam', exam, 70]]) {
     if (value === undefined || value === null) continue;
     const n = Number(value);
     if (Number.isNaN(n) || n < 0 || n > max) {

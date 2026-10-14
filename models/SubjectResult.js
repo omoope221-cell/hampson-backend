@@ -22,7 +22,7 @@ const subjectResultSchema = new mongoose.Schema(
     // used for ownership checks on every subsequent write.
     teacher: { type: mongoose.Schema.Types.ObjectId, ref: 'Staff', required: true },
 
-    ca1: { type: Number, default: 0, min: 0, max: 10 },
+    ca1: { type: Number, default: 0, min: 0, max: 30 },
     ca2: { type: Number, default: 0, min: 0, max: 10 },
     assignment: { type: Number, default: 0, min: 0, max: 10 },
     exam: { type: Number, default: 0, min: 0, max: 70 },
