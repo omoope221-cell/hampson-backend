@@ -20,8 +20,8 @@ const SCHOOL_EMAIL = 'hampsonsschool@gmail.com';
 // drop one at backend/assets/hampsons-primary-logo.png and it'll be
 // picked up automatically.
 const BRANDING = {
-  secondary: { name: 'HAMPSONS COLLEGE', logoFile: 'hampsons-college-logo.png' },
-  primary: { name: 'HAMPSONS NURSERY & PRIMARY SCHOOL', logoFile: 'hampsons-primary-logo.png' },
+  secondary: { name: 'HAMPSONS COLLEGE', logoFile: 'hampsons-college-logo.png', stampFile: 'hampsons-college-stamp.png' },
+  primary: { name: 'HAMPSONS NURSERY & PRIMARY SCHOOL', logoFile: 'hampsons-primary-logo.png', stampFile: 'hampsons-primary-stamp.png' },
 };
 
 function loadLocalLogo(file) {
@@ -88,6 +88,10 @@ async function streamReportCard(res, { result, schoolName, schoolLogo, schoolMot
   // back to the old behaviour (site settings name + remote logo).
   const displayName = branding ? branding.name : String(schoolName || '').toUpperCase();
   const logoBuffer = branding ? loadLocalLogo(branding.logoFile) : await fetchImageBuffer(schoolLogo);
+  // Section stamp (college stamp for secondary; primary's own file once
+  // it's dropped into backend/assets) and the student's passport photo.
+  const stampBuffer = branding ? loadLocalLogo(branding.stampFile) : null;
+  const photoBuffer = await fetchImageBuffer(result.student?.passportPhoto);
 
   const doc = new PDFDocument({ size: 'A4', margin: 36 });
   res.setHeader('Content-Type', 'application/pdf');
@@ -136,7 +140,27 @@ async function streamReportCard(res, { result, schoolName, schoolLogo, schoolMot
     ['Attendance', result.attendance?.totalDays ? `${result.attendance.daysPresent ?? 0} / ${result.attendance.totalDays} Days` : '—'],
     ['Class Teacher', result.class?.classTeacher ? `${result.class.classTeacher.firstName} ${result.class.classTeacher.lastName}` : '—'],
   ];
-  keyValueTable(doc, info, pageWidth, left);
+  // Passport photo box on the right so whoever opens the card can see
+  // whose result it is. Falls back to an empty labelled frame when the
+  // student has no photo uploaded yet.
+  const photoW = 78;
+  const photoH = 94;
+  const photoX = left + pageWidth - photoW;
+  const infoTop = doc.y;
+  keyValueTable(doc, info, pageWidth - photoW - 12, left);
+  const infoBottom = doc.y;
+  doc.rect(photoX, infoTop, photoW, photoH).lineWidth(0.8).stroke('#9aa3b5');
+  let photoDrawn = false;
+  if (photoBuffer) {
+    try { doc.image(photoBuffer, photoX + 1, infoTop + 1, { fit: [photoW - 2, photoH - 2], align: 'center', valign: 'center' }); photoDrawn = true; } catch { /* unsupported image — show the empty frame */ }
+  }
+  if (!photoDrawn) {
+    doc.font('Helvetica-Bold').fontSize(7).fillColor('#9aa3b5').text('PASSPORT', photoX, infoTop + photoH / 2 - 8, { width: photoW, align: 'center' });
+    doc.text('PHOTO', photoX, infoTop + photoH / 2 + 2, { width: photoW, align: 'center' });
+    doc.fillColor('#000000');
+  }
+  doc.lineWidth(1);
+  doc.y = Math.max(infoBottom, infoTop + photoH + 2);
   doc.moveDown(0.6);
 
   // --- Academic Performance ---
@@ -201,33 +225,28 @@ async function streamReportCard(res, { result, schoolName, schoolLogo, schoolMot
   doc.font('Helvetica').fontSize(9).text(result.principalComment || '__________________________________________________');
   doc.moveDown(0.8);
 
-  // --- Signatures (Class Teacher / Head Teacher / Parent-Guardian) + School Stamp ---
-  maybeNewPage(doc, 130);
-  sectionTitle(doc, 'SIGNATURES', pageWidth, left);
-  const sigColWidth = pageWidth / 3;
-  const sigTop = doc.y;
-  ['CLASS TEACHER', 'HEAD TEACHER / PRINCIPAL', 'PARENT / GUARDIAN'].forEach((label, i) => {
-    const x = left + i * sigColWidth;
-    doc.font('Helvetica-Bold').fontSize(8).fillColor(NAVY).text(label, x, sigTop, { width: sigColWidth - 8 });
-    doc.fillColor('#000000').font('Helvetica').fontSize(9);
-    doc.text('Signature: ______________________', x, sigTop + 14, { width: sigColWidth - 8 });
-    doc.text('Date: ______________________', x, sigTop + 30, { width: sigColWidth - 8 });
-  });
-  doc.y = sigTop + 50;
-  doc.moveDown(0.6);
-
-  // School Stamp circle
-  const stampR = 30;
-  const stampCX = left + stampR + 4;
-  const stampCY = doc.y + stampR;
-  doc.circle(stampCX, stampCY, stampR).dash(2, { space: 2 }).stroke('#9aa3b5');
-  doc.undash();
-  doc.font('Helvetica-Bold').fontSize(7).fillColor('#9aa3b5').text('SCHOOL', stampCX - stampR, stampCY - 8, { width: stampR * 2, align: 'center' });
-  doc.text('STAMP', stampCX - stampR, stampCY + 2, { width: stampR * 2, align: 'center' });
-  doc.fillColor('#000000');
-  doc.font('Helvetica').fontSize(9).text(`Date Issued: ${fmtDate(result.approvedAt)}`, left + stampR * 2 + 20, stampCY - 5);
-  doc.y = stampCY + stampR + 10;
-  doc.moveDown(0.6);
+  // --- Head Teacher / Principal + School Stamp ---
+  const stampW = 130;
+  const stampH = 100;
+  maybeNewPage(doc, stampH + 40);
+  sectionTitle(doc, 'HEAD TEACHER / PRINCIPAL', pageWidth, left);
+  const sigTop = doc.y + 4;
+  doc.font('Helvetica').fontSize(9).fillColor('#000000').text('Date: ______________________', left, sigTop + 30, { width: pageWidth - stampW - 20 });
+  const stampX = left + pageWidth - stampW;
+  if (stampBuffer) {
+    try { doc.image(stampBuffer, stampX, sigTop, { fit: [stampW, stampH], align: 'right', valign: 'top' }); } catch { /* skip an unreadable stamp */ }
+  } else {
+    // No stamp file for this section yet — keep an empty frame so one can be stamped by hand.
+    const r = 30;
+    doc.circle(stampX + stampW - r - 4, sigTop + r + 4, r).dash(2, { space: 2 }).stroke('#9aa3b5');
+    doc.undash();
+    doc.font('Helvetica-Bold').fontSize(7).fillColor('#9aa3b5').text('SCHOOL', stampX + stampW - r * 2 - 4, sigTop + r - 4, { width: r * 2, align: 'center' });
+    doc.text('STAMP', stampX + stampW - r * 2 - 4, sigTop + r + 6, { width: r * 2, align: 'center' });
+    doc.fillColor('#000000');
+  }
+  doc.y = sigTop + stampH + 6;
+  doc.x = left;
+  doc.moveDown(0.4);
 
   // --- Report Card Status ---
   sectionTitle(doc, 'REPORT CARD STATUS', pageWidth, left);

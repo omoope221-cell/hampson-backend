@@ -146,7 +146,7 @@ exports.getResult = catchAsync(async (req, res, next) => {
 exports.getReportCardPdf = catchAsync(async (req, res, next) => {
   const scoped = await scopeToRequester(req, { _id: req.params.id });
   const result = await Result.findOne(scoped)
-    .populate('student', 'firstName lastName admissionNumber gender dateOfBirth section')
+    .populate('student', 'firstName lastName admissionNumber gender dateOfBirth section passportPhoto')
     .populate({ path: 'class', select: 'name arm section classTeacher', populate: { path: 'classTeacher', select: 'firstName lastName' } })
     .populate('session', 'name')
     .populate('scores.subject', 'name code');
