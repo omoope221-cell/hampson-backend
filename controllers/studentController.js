@@ -8,6 +8,7 @@ const AppError = require('../utils/AppError');
 const ApiFeatures = require('../utils/apiFeatures');
 const recordAudit = require('../utils/audit');
 const { uploadBuffer } = require('../utils/cloudinaryUpload');
+const { sectionScopeFor } = require('../utils/sectionScope');
 
 // Applies row-level scoping on top of the base query depending on who is asking.
 async function scopeToRequester(req, baseFilter = {}) {
@@ -21,6 +22,9 @@ async function scopeToRequester(req, baseFilter = {}) {
       const staff = await Staff.findById(staffProfile);
       return { ...baseFilter, class: { $in: staff?.assignedClasses || [] } };
     }
+    // Principal/VP → secondary students only; Head Teacher → primary only.
+    const scope = sectionScopeFor(req.user);
+    if (scope) return { ...baseFilter, section: scope };
     return baseFilter;
   }
   if (accountType === 'parent') {

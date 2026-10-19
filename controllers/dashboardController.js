@@ -3,6 +3,7 @@ const Staff = require('../models/Staff');
 const Payment = require('../models/Payment');
 const Result = require('../models/Result');
 const catchAsync = require('../utils/catchAsync');
+const { sectionScopeFor } = require('../utils/sectionScope');
 
 // Turns an aggregate's [{_id: 'primary', count}, ...] rows into a plain
 // {primary, secondary, both} object, folding anything unexpected
@@ -23,16 +24,20 @@ exports.getSummary = catchAsync(async (req, res) => {
   const { accountType, studentProfile } = req.user;
 
   if (accountType === 'super_admin' || (accountType === 'staff' && req.user.staffRole !== 'teacher')) {
+    // Principal/VP see only secondary numbers; Head Teacher only primary.
+    const scope = sectionScopeFor(req.user);
+    const studentMatch = { status: 'active', ...(scope && { section: scope }) };
+    const staffMatch = { status: 'active', ...(scope && { section: { $in: [scope, 'both'] } }) };
     const [studentCount, staffCount, revenueAgg, studentsBySectionRaw, staffBySectionRaw] = await Promise.all([
-      Student.countDocuments({ status: 'active' }),
-      Staff.countDocuments({ status: 'active' }),
+      Student.countDocuments(studentMatch),
+      Staff.countDocuments(staffMatch),
       Payment.aggregate([{ $match: { status: 'completed' } }, { $group: { _id: null, total: { $sum: '$amountPaid' } } }]),
       Student.aggregate([
-        { $match: { status: 'active' } },
+        { $match: studentMatch },
         { $group: { _id: '$section', count: { $sum: 1 } } },
       ]),
       Staff.aggregate([
-        { $match: { status: 'active' } },
+        { $match: staffMatch },
         { $group: { _id: '$section', count: { $sum: 1 } } },
       ]),
     ]);
@@ -47,6 +52,7 @@ exports.getSummary = catchAsync(async (req, res) => {
         totalRevenue: revenueAgg[0]?.total || 0,
         studentsBySection,
         staffBySection,
+        scope: scope || null,
       },
     });
   }

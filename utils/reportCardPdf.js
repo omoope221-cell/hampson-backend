@@ -229,7 +229,7 @@ async function streamReportCard(res, { result, schoolName, schoolLogo, schoolMot
   const stampW = 130;
   const stampH = 100;
   maybeNewPage(doc, stampH + 40);
-  sectionTitle(doc, 'HEAD TEACHER / PRINCIPAL', pageWidth, left);
+  sectionTitle(doc, section === 'primary' ? 'HEAD TEACHER' : section === 'secondary' ? 'PRINCIPAL' : 'HEAD TEACHER / PRINCIPAL', pageWidth, left);
   const sigTop = doc.y + 4;
   doc.font('Helvetica').fontSize(9).fillColor('#000000').text('Date: ______________________', left, sigTop + 30, { width: pageWidth - stampW - 20 });
   const stampX = left + pageWidth - stampW;

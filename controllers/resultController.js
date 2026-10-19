@@ -12,6 +12,7 @@ const AppError = require('../utils/AppError');
 const ApiFeatures = require('../utils/apiFeatures');
 const recordAudit = require('../utils/audit');
 const { syncResultFromSubjectEntries } = require('../utils/resultAggregate');
+const { sectionScopeFor, canActOnSection } = require('../utils/sectionScope');
 
 // Overseers can review/correct/approve/publish ANY class's results.
 // Everyone else (including a Class Teacher) is scoped to the class(es)
@@ -97,6 +98,11 @@ async function scopeToRequester(req, baseFilter = {}) {
   if (accountType === 'primary_student' || accountType === 'secondary_student') {
     return { ...baseFilter, student: studentProfile, status: 'approved' };
   }
+  if (accountType === 'staff' && sectionScopeFor(req.user)) {
+    // Principal/VP only see secondary classes' results; Head Teacher only primary.
+    const ids = await Class.find({ section: sectionScopeFor(req.user) }).distinct('_id');
+    return { ...baseFilter, class: { $in: ids } };
+  }
   if (accountType === 'staff' && !isOverseerReq(req)) {
     const staff = await Staff.findOne({ user: req.user.id });
     if (staff) {
@@ -160,7 +166,10 @@ exports.getReportCardPdf = catchAsync(async (req, res, next) => {
 // may touch the aggregate Result document for one of its students —
 // enforced here, not just by hiding the button in the UI.
 async function assertClassTeacherOrOverseer(req, classDoc) {
-  if (isOverseerReq(req)) return { staff: await Staff.findOne({ user: req.user.id }), isOverseer: true };
+  if (isOverseerReq(req)) {
+    if (!canActOnSection(req.user, classDoc.section)) throw new AppError("This class belongs to the other school's administration.", 403);
+    return { staff: await Staff.findOne({ user: req.user.id }), isOverseer: true };
+  }
   const staff = await Staff.findOne({ user: req.user.id });
   const isClassTeacher = !!(staff && classDoc.classTeacher && classDoc.classTeacher.equals(staff._id));
   if (!isClassTeacher) {
@@ -223,6 +232,9 @@ exports.getClassReviewMatrix = catchAsync(async (req, res, next) => {
     .populate('subjectTeachers.teacher', 'firstName lastName')
     .populate('classTeacher', 'firstName lastName');
   if (!classDoc) return next(new AppError('Class not found.', 404));
+  if (isOverseerReq(req) && !canActOnSection(req.user, classDoc.section)) {
+    return next(new AppError("This class belongs to the other school's administration.", 403));
+  }
   if (!isOverseerReq(req)) {
     const staff = await Staff.findOne({ user: req.user.id });
     const isClassTeacher = !!(staff && classDoc.classTeacher && classDoc.classTeacher._id.equals(staff._id));
@@ -301,6 +313,7 @@ exports.approveResult = catchAsync(async (req, res, next) => {
 
   const existing = await Result.findById(req.params.id).populate('class');
   if (!existing) return next(new AppError('Result not found.', 404));
+  if (!canActOnSection(req.user, existing.class?.section)) return next(new AppError("You can only do this for your own school's results.", 403));
 
   existing.status = 'approved';
   existing.approvedBy = req.user.id;
@@ -322,6 +335,7 @@ exports.rejectResult = catchAsync(async (req, res, next) => {
 
   const existing = await Result.findById(req.params.id).populate('class');
   if (!existing) return next(new AppError('Result not found.', 404));
+  if (!canActOnSection(req.user, existing.class?.section)) return next(new AppError("You can only do this for your own school's results.", 403));
 
   existing.status = 'rejected';
   existing.principalComment = reason;
@@ -342,6 +356,7 @@ exports.unpublishResult = catchAsync(async (req, res, next) => {
 
   const existing = await Result.findById(req.params.id).populate('class');
   if (!existing) return next(new AppError('Result not found.', 404));
+  if (!canActOnSection(req.user, existing.class?.section)) return next(new AppError("You can only do this for your own school's results.", 403));
   if (existing.status !== 'approved') return next(new AppError('Only a published (approved) result can be unpublished.', 400));
 
   existing.status = 'submitted';

@@ -5,6 +5,7 @@ const Staff = require('../models/Staff');
 const catchAsync = require('../utils/catchAsync');
 const AppError = require('../utils/AppError');
 const recordAudit = require('../utils/audit');
+const { canActOnSection } = require('../utils/sectionScope');
 const { scoreSubjectEntry, syncResultFromSubjectEntries } = require('../utils/resultAggregate');
 
 const OVERSEER_ROLES = ['principal', 'vice_principal', 'head_teacher'];
@@ -37,6 +38,7 @@ async function assertSubjectAssignment(req, classId, subjectId) {
   const assignedStaffId = assignment.teacher || null;
 
   if (isOverseerReq(req)) {
+    if (!canActOnSection(req.user, classDoc.section)) throw new AppError("This class belongs to the other school's administration.", 403);
     return { staff, isOverseer: true, classDoc, effectiveTeacherId: assignedStaffId };
   }
 

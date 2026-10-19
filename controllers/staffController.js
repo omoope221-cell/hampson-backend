@@ -6,16 +6,22 @@ const AppError = require('../utils/AppError');
 const ApiFeatures = require('../utils/apiFeatures');
 const recordAudit = require('../utils/audit');
 const { uploadBuffer } = require('../utils/cloudinaryUpload');
+const { sectionScopeFor } = require('../utils/sectionScope');
 
 exports.getAllStaff = catchAsync(async (req, res) => {
-  const features = new ApiFeatures(Staff.find().populate('assignedClasses assignedSubjects', 'name'), req.query)
+  // Principal/VP see secondary staff, Head Teacher sees primary staff
+  // (staff marked "both" teach in both schools, so they show for either).
+  const scope = sectionScopeFor(req.user);
+  const base = scope ? { section: { $in: [scope, 'both'] } } : {};
+  if (scope) delete req.query.section;
+  const features = new ApiFeatures(Staff.find(base).populate('assignedClasses assignedSubjects', 'name'), req.query)
     .filter()
     .search(['firstName', 'lastName', 'staffId', 'department'])
     .sort()
     .limitFields()
     .paginate();
 
-  const [docs, total] = await Promise.all([features.query, Staff.countDocuments()]);
+  const [docs, total] = await Promise.all([features.query, Staff.countDocuments(base)]);
 
   res.status(200).json({
     status: 'success',
@@ -27,7 +33,8 @@ exports.getAllStaff = catchAsync(async (req, res) => {
 
 exports.getStaffMember = catchAsync(async (req, res, next) => {
   const staff = await Staff.findById(req.params.id).populate('assignedClasses assignedSubjects');
-  if (!staff) return next(new AppError('Staff member not found.', 404));
+  const scope = sectionScopeFor(req.user);
+  if (!staff || (scope && !['both', scope].includes(staff.section))) return next(new AppError('Staff member not found.', 404));
   res.status(200).json({ status: 'success', data: staff });
 });
 
