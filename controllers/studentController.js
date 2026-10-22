@@ -9,6 +9,8 @@ const ApiFeatures = require('../utils/apiFeatures');
 const recordAudit = require('../utils/audit');
 const { uploadBuffer } = require('../utils/cloudinaryUpload');
 const { sectionScopeFor } = require('../utils/sectionScope');
+const Subject = require('../models/Subject');
+const { departmentFilterForSubject } = require('../config/departments');
 
 // Applies row-level scoping on top of the base query depending on who is asking.
 async function scopeToRequester(req, baseFilter = {}) {
@@ -20,6 +22,23 @@ async function scopeToRequester(req, baseFilter = {}) {
     if (req.user.staffRole === 'teacher') {
       const Staff = require('../models/Staff');
       const staff = await Staff.findById(staffProfile);
+      // What a teacher sees comes from the real assignments:
+      //  - Class Teacher of a class → every student in it
+      //  - Subject Teacher of a subject in a class → only the students who
+      //    take that subject (SS1–SS3: by department)
+      const myClasses = await Class.find({ $or: [{ classTeacher: staffProfile }, { 'subjectTeachers.teacher': staffProfile }] })
+        .populate('subjectTeachers.subject', 'name');
+      const conds = [];
+      myClasses.forEach((c) => {
+        if (c.classTeacher && String(c.classTeacher) === String(staffProfile)) { conds.push({ class: c._id }); return; }
+        c.subjectTeachers.forEach((st) => {
+          if (String(st.teacher) !== String(staffProfile)) return;
+          const frag = departmentFilterForSubject(st.subject?.name);
+          conds.push(frag ? { class: c._id, ...frag } : { class: c._id });
+        });
+      });
+      if (conds.length) return { ...baseFilter, $or: conds };
+      // No class/subject assignment recorded yet — keep the old behaviour.
       return { ...baseFilter, class: { $in: staff?.assignedClasses || [] } };
     }
     // Principal/VP → secondary students only; Head Teacher → primary only.
@@ -39,7 +58,17 @@ async function scopeToRequester(req, baseFilter = {}) {
 }
 
 exports.getAllStudents = catchAsync(async (req, res) => {
-  const scoped = await scopeToRequester(req);
+  let scoped = await scopeToRequester(req);
+
+  // ?subject=<id> narrows to the students who take that subject (only
+  // ever narrows — it can't widen what the requester may see).
+  const subjectId = req.query.subject;
+  delete req.query.subject;
+  if (subjectId) {
+    const subjectDoc = await Subject.findById(subjectId).select('name');
+    const frag = departmentFilterForSubject(subjectDoc?.name);
+    if (frag) scoped = { $and: [scoped, frag] };
+  }
 
   const features = new ApiFeatures(Student.find(scoped).populate('class', 'name section arm'), req.query)
     .filter()
