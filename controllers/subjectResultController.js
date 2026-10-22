@@ -2,7 +2,7 @@ const SubjectResult = require('../models/SubjectResult');
 const Class = require('../models/Class');
 const Student = require('../models/Student');
 const Subject = require('../models/Subject');
-const { studentTakesSubject } = require('../config/departments');
+const { studentTakesSubject, isDepartmentSubject } = require('../config/departments');
 const Staff = require('../models/Staff');
 const catchAsync = require('../utils/catchAsync');
 const AppError = require('../utils/AppError');
@@ -134,7 +134,10 @@ exports.getSubjectClassSheet = catchAsync(async (req, res, next) => {
     };
   });
 
-  res.status(200).json({ status: 'success', results: rows.length, data: rows });
+  // Lets the page warn when a subject's name doesn't match any department
+  // list (so nobody is being filtered) — usually a spelling slip.
+  const departmentFiltered = isDepartmentSubject(subjectDoc?.name);
+  res.status(200).json({ status: 'success', results: rows.length, meta: { departmentFiltered, subjectName: subjectDoc?.name }, data: rows });
 });
 
 // POST /api/v1/results/subject-entries — create/update ONE student's
