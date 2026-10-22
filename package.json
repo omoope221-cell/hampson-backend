@@ -10,6 +10,7 @@
     "dev": "nodemon server.js",
     "seed": "node utils/seed.js",
     "fix-indexes": "node scripts/fixStaleIndexes.js",
+    "add-senior-subjects": "node scripts/addSeniorSubjects.js",
     "backfill-staff-section": "node scripts/backfillStaffSection.js"
   },
   "dependencies": {

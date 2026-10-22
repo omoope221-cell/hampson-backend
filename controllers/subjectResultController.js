@@ -1,6 +1,8 @@
 const SubjectResult = require('../models/SubjectResult');
 const Class = require('../models/Class');
 const Student = require('../models/Student');
+const Subject = require('../models/Subject');
+const { studentTakesSubject } = require('../config/departments');
 const Staff = require('../models/Staff');
 const catchAsync = require('../utils/catchAsync');
 const AppError = require('../utils/AppError');
@@ -108,10 +110,13 @@ exports.getSubjectClassSheet = catchAsync(async (req, res, next) => {
 
   await assertSubjectAssignment(req, classId, subjectId);
 
-  const [students, entries] = await Promise.all([
-    Student.find({ class: classId, status: 'active' }).select('firstName lastName admissionNumber').sort('firstName'),
+  const [allStudents, entries, subjectDoc] = await Promise.all([
+    Student.find({ class: classId, status: 'active' }).select('firstName lastName admissionNumber department').sort('firstName'),
     SubjectResult.find({ class: classId, subject: subjectId, session, term }),
+    Subject.findById(subjectId).select('name'),
   ]);
+  // SS1–SS3: only the students whose department offers this subject.
+  const students = allStudents.filter((s) => studentTakesSubject(s, subjectDoc?.name));
 
   const byStudent = new Map(entries.map((e) => [String(e.student), e]));
   const rows = students.map((s) => {
@@ -149,6 +154,10 @@ exports.upsertSubjectResult = catchAsync(async (req, res, next) => {
 
   const studentDoc = await Student.findOne({ _id: student, class: classId });
   if (!studentDoc) return next(new AppError('This student is not in the specified class.', 400));
+  const subjectDoc = await Subject.findById(subject).select('name');
+  if (!studentTakesSubject(studentDoc, subjectDoc?.name)) {
+    return next(new AppError(`${studentDoc.firstName} ${studentDoc.lastName} (${studentDoc.department}) doesn't take ${subjectDoc?.name}.`, 400));
+  }
 
   for (const [field, value, max] of [['ca1', ca1, 30], ['ca2', ca2, 10], ['assignment', assignment, 10], ['exam', exam, 70]]) {
     if (value === undefined || value === null) continue;
@@ -194,10 +203,13 @@ exports.submitSubjectResults = catchAsync(async (req, res, next) => {
 
   await assertSubjectAssignment(req, classId, subject);
 
-  const [studentCount, entries] = await Promise.all([
-    Student.countDocuments({ class: classId, status: 'active' }),
+  const [classStudents, entries, subjectDoc] = await Promise.all([
+    Student.find({ class: classId, status: 'active' }).select('department'),
     SubjectResult.find({ class: classId, subject, session, term }),
+    Subject.findById(subject).select('name'),
   ]);
+  // Only students who actually take this subject need a score.
+  const studentCount = classStudents.filter((s) => studentTakesSubject(s, subjectDoc?.name)).length;
 
   if (entries.length < studentCount) {
     return next(new AppError(`${studentCount - entries.length} student(s) in this class still have no score for this subject.`, 400));

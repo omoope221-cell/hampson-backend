@@ -13,6 +13,7 @@ const ApiFeatures = require('../utils/apiFeatures');
 const recordAudit = require('../utils/audit');
 const { syncResultFromSubjectEntries } = require('../utils/resultAggregate');
 const { sectionScopeFor, canActOnSection } = require('../utils/sectionScope');
+const { studentTakesSubject } = require('../config/departments');
 
 // Overseers can review/correct/approve/publish ANY class's results.
 // Everyone else (including a Class Teacher) is scoped to the class(es)
@@ -243,7 +244,7 @@ exports.getClassReviewMatrix = catchAsync(async (req, res, next) => {
 
   const subjectAssignments = classDoc.subjectTeachers || [];
   const [students, entries, results] = await Promise.all([
-    Student.find({ class: classId, status: 'active' }).select('firstName lastName admissionNumber').sort('firstName'),
+    Student.find({ class: classId, status: 'active' }).select('firstName lastName admissionNumber department').sort('firstName'),
     SubjectResult.find({ class: classId, session, term }),
     Result.find({ class: classId, session, term }),
   ]);
@@ -257,7 +258,7 @@ exports.getClassReviewMatrix = catchAsync(async (req, res, next) => {
   const resultByStudent = new Map(results.map((r) => [String(r.student), r]));
 
   const data = students.map((s) => {
-    const subjectStatuses = subjectAssignments.map((sa) => {
+    const subjectStatuses = subjectAssignments.filter((sa) => studentTakesSubject(s, sa.subject?.name)).map((sa) => {
       const entry = entriesByStudent.get(String(s._id))?.get(String(sa.subject._id || sa.subject));
       return {
         subject: sa.subject,
