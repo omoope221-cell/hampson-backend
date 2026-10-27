@@ -15,7 +15,7 @@ const GRADE_REMARKS = { A: 'Excellent', B: 'Very Good', C: 'Good', D: 'Fair', E:
 // Computes total/grade/remark for one SubjectResult (or a plain object
 // shaped like one) from its raw score fields. Mutates and returns it.
 function scoreSubjectEntry(entry) {
-  entry.total = (entry.ca1 || 0) + (entry.ca2 || 0) + (entry.assignment || 0) + (entry.exam || 0);
+  entry.total = (entry.ca1 || 0) + (entry.exam || 0);
   entry.grade = computeGrade(entry.total);
   entry.remark = GRADE_REMARKS[entry.grade] || '';
   return entry;
@@ -40,8 +40,6 @@ async function syncResultFromSubjectEntries({ student, class: classId, session, 
   result.scores = entries.map((e) => ({
     subject: e.subject,
     ca1: e.ca1,
-    ca2: e.ca2,
-    assignment: e.assignment,
     exam: e.exam,
     total: e.total,
     grade: e.grade,

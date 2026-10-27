@@ -125,7 +125,7 @@ exports.getSubjectClassSheet = catchAsync(async (req, res, next) => {
       student: s,
       entry: entry
         ? {
-            _id: entry._id, ca1: entry.ca1, ca2: entry.ca2, assignment: entry.assignment, exam: entry.exam,
+            _id: entry._id, ca1: entry.ca1, exam: entry.exam,
             total: entry.total, grade: entry.grade, status: entry.status, submittedAt: entry.submittedAt,
             updatedAt: entry.updatedAt,
           }
@@ -145,7 +145,7 @@ exports.getSubjectClassSheet = catchAsync(async (req, res, next) => {
 // overseer) can call this, and only for their own assignment — enforced
 // server-side, not just hidden in the UI.
 exports.upsertSubjectResult = catchAsync(async (req, res, next) => {
-  const { student, class: classId, subject, session, term, ca1, ca2, assignment, exam } = req.body;
+  const { student, class: classId, subject, session, term, ca1, exam } = req.body;
   if (!student || !classId || !subject || !session || !term) {
     return next(new AppError('student, class, subject, session and term are required.', 400));
   }
@@ -162,7 +162,7 @@ exports.upsertSubjectResult = catchAsync(async (req, res, next) => {
     return next(new AppError(`${studentDoc.firstName} ${studentDoc.lastName} (${studentDoc.department}) doesn't take ${subjectDoc?.name}.`, 400));
   }
 
-  for (const [field, value, max] of [['ca1', ca1, 30], ['ca2', ca2, 10], ['assignment', assignment, 10], ['exam', exam, 70]]) {
+  for (const [field, value, max] of [['ca1', ca1, 30], ['exam', exam, 70]]) {
     if (value === undefined || value === null) continue;
     const n = Number(value);
     if (Number.isNaN(n) || n < 0 || n > max) {
@@ -179,8 +179,6 @@ exports.upsertSubjectResult = catchAsync(async (req, res, next) => {
     entry = new SubjectResult({ student, class: classId, subject, session, term, enteredBy: staff?._id, teacher: effectiveTeacherId });
   }
   if (ca1 !== undefined) entry.ca1 = Number(ca1);
-  if (ca2 !== undefined) entry.ca2 = Number(ca2);
-  if (assignment !== undefined) entry.assignment = Number(assignment);
   if (exam !== undefined) entry.exam = Number(exam);
   entry.lastUpdatedBy = staff?._id;
   scoreSubjectEntry(entry);
